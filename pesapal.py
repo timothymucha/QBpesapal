@@ -23,7 +23,7 @@ if uploaded_file:
     iif = StringIO()
     iif.write("!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tMEMO\n")
     iif.write("!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tMEMO\n")
-    iif.write("ENDTRNS\n")
+    iif.write("!ENDTRNS\n")
 
     for idx, row in df.iterrows():
         date_str = pd.to_datetime(row['Date']).strftime('%m/%d/%Y')
@@ -35,18 +35,18 @@ if uploaded_file:
         if row['Payment Method'] == 'CREDITCARDMC_CYB_KE':
             # Customer payment received
             iif.write(f"TRNS\tPAYMENT\t{date_str}\tAccounts Receivable\t{name}\t{-net_amount}\t{memo}\n")
-            iif.write(f"SPL\tPAYMENT\t{date_str}\tUndeposited Funds\t{name}\t{net_amount}\t{memo}\n")
+            iif.write(f"SPL\tPAYMENT\t{date_str}\tPesapal\t{name}\t{net_amount}\t{memo}\n")
             iif.write("ENDTRNS\n")
 
             if commission > 0:
                 # Bank service charge
-                iif.write(f"TRNS\tCHECK\t{date_str}\tPesapal\tBank Fee\t{-commission}\tPesapal commission\n")
+                iif.write(f"TRNS\tCHECK\t{date_str}\tPesapal\t{-commission}\tPesapal Transaction Fee\n")
                 iif.write(f"SPL\tCHECK\t{date_str}\tBank Service Charges\t\t{commission}\tPesapal commission\n")
                 iif.write("ENDTRNS\n")
 
         elif row['Payment Method'] == 'VOUCHER':
             # Loan repayment
-            iif.write(f"TRNS\tCHECK\t{date_str}\tPesapal\tLoan Repayment\t{-net_amount}\tPesapal Loan Auto Repayment\n")
+            iif.write(f"TRNS\tCHECK\t{date_str}\tPesapal\t{-net_amount}\tPesapal Loan Auto Repayment\n")
             iif.write(f"SPL\tCHECK\t{date_str}\tLoan:Pesapal Loan\t\t{net_amount}\tPesapal Loan Auto Repayment\n")
             iif.write("ENDTRNS\n")
 
