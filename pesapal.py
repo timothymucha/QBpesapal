@@ -7,21 +7,23 @@ st.title("Credit Card Sales to QuickBooks IIF Converter")
 uploaded_file = st.file_uploader("Upload Excel Report", type=["xlsx"])
 
 if uploaded_file:
-    # Read Excel using row 13 (index 12) as header
+    # Read Excel with header row at 13 (index 12)
     df = pd.read_excel(uploaded_file, header=12)
     
-    # Keep only rows where Billing Station (column 'Till#' or col E) contains "MT01"
-    if "Till#" in df.columns:
-        df = df[df["Till#"].astype(str).str.contains("MT01", na=False)]
-    else:
-        st.error("Could not find 'Till#' column (expected in column E). Please check your file.")
+    # Ensure we have enough columns
+    if df.shape[1] < 5:
+        st.error("The file does not have enough columns. Please check the format.")
         st.stop()
     
-    # Keep only relevant columns
-    df = df[["Bill Date", "Bill No.", "Amount"]].copy()
+    # Filter only rows where column E (index 4) contains 'MT01'
+    df = df[df.iloc[:, 4].astype(str).str.contains("MT01", na=False)]
+    
+    # Keep only relevant columns: J (9), P (15), Z (25)
+    df = df.iloc[:, [9, 15, 25]].copy()
+    df.columns = ["Bill Date", "Bill No.", "Amount"]
     
     # --- Clean fields ---
-    # Parse and format Bill Date
+    # Parse Bill Date
     df["Bill Date"] = pd.to_datetime(df["Bill Date"], errors="coerce", dayfirst=True)
     df = df.dropna(subset=["Bill Date"])
     df["Date"] = df["Bill Date"].dt.strftime("%m/%d/%Y")
@@ -29,7 +31,7 @@ if uploaded_file:
     # Clean Bill Number
     df["BillNo"] = df["Bill No."].astype(str).str.strip()
     
-    # Clean Amount (remove commas / KES text, then numeric)
+    # Clean Amount (remove commas / text, then numeric)
     df["Amount"] = (
         df["Amount"].astype(str)
         .str.replace(",", "", regex=False)
