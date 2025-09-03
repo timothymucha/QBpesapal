@@ -4,71 +4,87 @@ from io import StringIO
 
 st.title("Credit Card Sales to QuickBooks IIF Converter")
 
+def truncate_at_blank(df):
+    """Truncate at first completely blank row"""
+    first_blank = df[df.isnull().all(axis=1)].index
+    if not first_blank.empty:
+        return df.loc[: first_blank[0] - 1]
+    return df
+
 uploaded_file = st.file_uploader("Upload Excel Report", type=["xlsx"])
 
 if uploaded_file:
-    # Read Excel with header row at 13 (index 12)
-    df = pd.read_excel(uploaded_file, header=12)
-    
-    # Ensure we have enough columns
-    if df.shape[1] < 5:
-        st.error("The file does not have enough columns. Please check the format.")
-        st.stop()
-    
-    # Filter only rows where column E (index 4) contains 'MT01'
-    df = df[df.iloc[:, 4].astype(str).str.contains("MT01", na=False)]
-    
-    # Keep only relevant columns: J (9), P (15), Z (25)
-    df = df.iloc[:, [9, 15, 25]].copy()
-    df.columns = ["Bill Date", "Bill No.", "Amount"]
-    
-    # --- Clean fields ---
-    # Parse Bill Date
-    df["Bill Date"] = pd.to_datetime(df["Bill Date"], errors="coerce", dayfirst=True)
-    df = df.dropna(subset=["Bill Date"])
-    df["Date"] = df["Bill Date"].dt.strftime("%m/%d/%Y")
-    
-    # Clean Bill Number
-    df["BillNo"] = df["Bill No."].astype(str).str.strip()
-    
-    # Clean Amount (remove commas / text, then numeric)
-    df["Amount"] = (
-        df["Amount"].astype(str)
-        .str.replace(",", "", regex=False)
-        .str.replace("KES", "", regex=False)
-        .str.strip()
-    )
-    df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
-    df = df.dropna(subset=["Amount"])
-    
-    # Create Memo
-    df["Memo"] = df["BillNo"].apply(lambda x: f"Mnarani Bill {x} Credit card sale")
-    
-    # Show preview
-    st.subheader("Preview of Cleaned Data")
-    st.dataframe(df[["Date", "BillNo", "Amount", "Memo"]].head(20))
-    
-    # Generate IIF content
-    iif = StringIO()
-    iif.write("!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tMEMO\n")
-    iif.write("!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tMEMO\n")
-    iif.write("!ENDTRNS\n")
-    
-    for _, row in df.iterrows():
-        iif.write(
-            f"TRNS\tSALESREC\t{row['Date']}\tCredit Card Clearing\tWalk-In Customer\t{row['Amount']}\t{row['Memo']}\n"
+    try:
+        # Read raw data starting from row 17 (skip first 16 rows)
+        df_raw = pd.read_excel(uploaded_file, header=None, skiprows=16)
+
+        # Rename relevant columns
+        df_raw.rename(columns={
+            4: "Till No",
+            9: "Date",
+            15: "Bill No.",
+            25: "Amount"
+        }, inplace=True)
+
+        # Keep only relevant cols
+        df = df_raw[["Till No", "Date", "Bill No.", "Amount"]].copy()
+
+        # Truncate at first blank row
+        df = truncate_at_blank(df)
+
+        # Filter only Till rows (credit card tills e.g., MT01)
+        df = df[df["Till No"].astype(str).str.contains("MT01", na=False)]
+
+        # Clean Date
+        df["Date"] = pd.to_datetime(
+            df["Date"], format="%d-%b-%Y %I.%M.%S %p", errors="coerce"
         )
-        iif.write(
-            f"SPL\tSALESREC\t{row['Date']}\tRevenue:POS Sales\tWalk-In Customer\t{-row['Amount']}\t{row['Memo']}\n"
+        df = df.dropna(subset=["Date"])
+        df["Date"] = df["Date"].dt.strftime("%m/%d/%Y")
+
+        # Clean Amount
+        df["Amount"] = (
+            df["Amount"].astype(str)
+            .str.replace(",", "", regex=False)
+            .str.strip()
         )
-        iif.write("ENDTRNS\n")
-    
-    # Download button
-    st.download_button(
-        label="Download IIF File",
-        data=iif.getvalue(),
-        file_name="credit_card_sales.iif",
-        mime="text/plain"
-    )
-    
-    st.success("IIF file generated successfully.")
+        df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
+        df = df.dropna(subset=["Amount"])
+
+        # Create Memo
+        df["Memo"] = df.apply(
+            lambda x: f"Till {x['Till No']} | Invoice {x['Bill No.']}",
+            axis=1
+        )
+
+        # --- Preview ---
+        st.subheader("🧾 Preview: First 10 Cleaned Credit Card Sales")
+        st.dataframe(df.head(10))
+
+        # --- Generate IIF ---
+        iif = StringIO()
+        iif.write("!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tMEMO\tDOCNUM\n")
+        iif.write("!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tMEMO\tDOCNUM\n")
+        iif.write("!ENDTRNS\n")
+
+        for _, row in df.iterrows():
+            iif.write(
+                f"TRNS\tPAYMENT\t{row['Date']}\tCredit Card Clearing\tWalk-In Customer\t{row['Amount']}\t{row['Memo']}\t{row['Bill No.']}\n"
+            )
+            iif.write(
+                f"SPL\tPAYMENT\t{row['Date']}\tAccounts Receivable\tWalk-In Customer\t{-row['Amount']}\t{row['Memo']}\t\n"
+            )
+            iif.write("ENDTRNS\n")
+
+        # Download
+        st.download_button(
+            label="⬇️ Download IIF File",
+            data=iif.getvalue(),
+            file_name="credit_card_sales.iif",
+            mime="text/plain"
+        )
+
+        st.success("✅ IIF file generated successfully.")
+
+    except Exception as e:
+        st.error(f"Error processing file: {e}")
