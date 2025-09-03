@@ -85,7 +85,7 @@ if uploaded_file:
             if charge == 0:
                 continue
             memo = f"2% Bank Charges on Credit Card Sales {date}"
-            docnum = f"CHG-{date.replace('/', '')}"
+            docnum = f"{date.replace('/', '')}"
 
             iif.write(
                 f"TRNS\tCHECK\t{date}\tPesapal\tBank Service Charges\t{-charge}\t{memo}\t{docnum}\n"
