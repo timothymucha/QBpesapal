@@ -69,10 +69,10 @@ if uploaded_file:
 
         for _, row in df.iterrows():
             iif.write(
-                f"TRNS\tPAYMENT\t{row['Date']}\tCredit Card Clearing\tWalk-In Customer\t{row['Amount']}\t{row['Memo']}\t{row['Bill No.']}\n"
+                f"TRNS\tPAYMENT\t{row['Date']}\tPesapal\tWalk-In\t{row['Amount']}\t{row['Memo']}\t{row['Bill No.']}\n"
             )
             iif.write(
-                f"SPL\tPAYMENT\t{row['Date']}\tAccounts Receivable\tWalk-In Customer\t{-row['Amount']}\t{row['Memo']}\t\n"
+                f"SPL\tPAYMENT\t{row['Date']}\tAccounts Receivable\tWalk-In\t{-row['Amount']}\t{row['Memo']}\t\n"
             )
             iif.write("ENDTRNS\n")
 
